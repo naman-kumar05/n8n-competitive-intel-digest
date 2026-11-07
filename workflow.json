@@ -1,0 +1,325 @@
+{
+  "name": "06 - Weekly Competitive Intelligence Digest",
+  "nodes": [
+    {
+      "id": "a6000001-0000-4000-8000-000000000001",
+      "name": "Every Monday 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [1],
+              "triggerAtHour": 7,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000002",
+      "name": "Define Competitors & Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "jsCode": "// Configure your competitors and news sources\nconst config = {\n  competitors: [\n    { name: 'Competitor A', domain: 'competitor-a.com', blog_rss: 'https://competitor-a.com/blog/rss.xml', twitter: '@competitorA' },\n    { name: 'Competitor B', domain: 'competitor-b.com', blog_rss: 'https://competitor-b.com/rss', twitter: '@competitorB' },\n    { name: 'Competitor C', domain: 'competitor-c.com', blog_rss: 'https://competitor-c.com/feed', twitter: '@competitorC' }\n  ],\n  news_queries: [\n    'your_industry_keyword product launch',\n    'your_industry_keyword funding',\n    'your_industry_keyword pricing',\n    'your_industry_keyword acquisition'\n  ],\n  digest_recipients: [\n    'ceo@REPLACE_YOUR_DOMAIN.com',\n    'product@REPLACE_YOUR_DOMAIN.com',\n    'sales@REPLACE_YOUR_DOMAIN.com'\n  ],\n  slack_channel: '#competitive-intel',\n  week_start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]\n};\n\nreturn [{ json: config }];"
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000003",
+      "name": "Fetch Competitor A Blog",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [720, 160],
+      "parameters": {
+        "url": "https://REPLACE_COMPETITOR_A_BLOG_RSS_URL",
+        "options": {}
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000004",
+      "name": "Fetch Competitor B Blog",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [720, 300],
+      "parameters": {
+        "url": "https://REPLACE_COMPETITOR_B_BLOG_RSS_URL",
+        "options": {}
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000005",
+      "name": "Fetch Industry News via NewsAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 440],
+      "parameters": {
+        "method": "GET",
+        "url": "https://newsapi.org/v2/everything",
+        "queryParameters": {
+          "parameters": [
+            { "name": "q", "value": "REPLACE_YOUR_INDUSTRY_KEYWORD OR competitor-a OR competitor-b" },
+            { "name": "from", "value": "={{ new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }}" },
+            { "name": "sortBy", "value": "relevancy" },
+            { "name": "language", "value": "en" },
+            { "name": "pageSize", "value": "30" },
+            { "name": "apiKey", "value": "REPLACE_WITH_NEWSAPI_KEY" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000006",
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300],
+      "parameters": {
+        "jsCode": "// Merge data from all 3 input streams\nconst competitorAItems = $input.all().filter(i => i.json.link || i.json.url).slice(0, 5);\n\nconst articles = [];\n\nfor (const item of competitorAItems) {\n  articles.push({\n    source_type: 'competitor_blog',\n    competitor: 'Competitor A',\n    title: item.json.title ?? '',\n    url: item.json.link ?? item.json.url ?? '',\n    summary: item.json.contentSnippet ?? item.json.description ?? '',\n    published_at: item.json.pubDate ?? item.json.isoDate ?? new Date().toISOString()\n  });\n}\n\nreturn [{ json: { articles, total_articles: articles.length, week_start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], generated_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000007",
+      "name": "AI Analyze & Generate Digest",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.4,
+      "position": [1200, 300],
+      "parameters": {
+        "resource": "chat",
+        "operation": "complete",
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a senior competitive intelligence analyst. Analyze the competitor and industry news provided and produce a sharp, actionable weekly digest for a B2B SaaS leadership team. Structure your response as valid JSON:\n{\n  \"executive_summary\": \"3-4 sentence high-level overview of the week\",\n  \"key_threats\": [{\"threat\": \"description\", \"competitor\": \"name\", \"urgency\": \"high|medium|low\", \"recommended_response\": \"action\"}],\n  \"opportunities\": [{\"opportunity\": \"description\", \"evidence\": \"why\", \"action\": \"what to do\"}],\n  \"competitor_highlights\": [{\"competitor\": \"name\", \"development\": \"what happened\", \"significance\": \"why it matters\", \"our_response\": \"suggested action\"}],\n  \"market_trends\": [{\"trend\": \"description\", \"evidence\": \"supporting data points\", \"impact\": \"how it affects us\"}],\n  \"pricing_intel\": \"any pricing changes or signals observed\",\n  \"product_launches\": [{\"competitor\": \"name\", \"product\": \"what launched\", \"threat_level\": \"high|medium|low\"}],\n  \"sentiment_summary\": \"overall competitive landscape sentiment this week\",\n  \"action_items\": [{\"owner\": \"CEO|Product|Sales|Marketing\", \"action\": \"specific action\", \"deadline\": \"this week|this month\"}]\n}"
+            },
+            {
+              "role": "user",
+              "content": "Week of {{ $json.week_start }}\n\nArticles and Intelligence Collected:\n{{ JSON.stringify($json.articles, null, 2) }}\n\nTotal sources: {{ $json.total_articles }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2500
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000008",
+      "name": "Parse Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.message?.content ?? '{}';\nlet digest;\ntry { digest = JSON.parse(raw); }\ncatch(e) { \n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  try { digest = JSON.parse(match?.[0] ?? '{}'); }\n  catch { digest = { executive_summary: 'AI analysis unavailable this week.', key_threats: [], opportunities: [], competitor_highlights: [], market_trends: [], action_items: [] }; }\n}\n\nconst prevData = $input.item.json;\n\n// Build HTML email\nconst formatSection = (title, items, formatter) => {\n  if (!items?.length) return '';\n  return `<h2 style=\"color:#1a1a2e;border-bottom:2px solid #e63946;padding-bottom:8px\">${title}</h2>` +\n    items.map(formatter).join('');\n};\n\nconst emailHtml = `\n<div style=\"font-family:Arial,sans-serif;max-width:800px;margin:0 auto\">\n  <div style=\"background:#1a1a2e;color:white;padding:24px;border-radius:8px 8px 0 0\">\n    <h1 style=\"margin:0;font-size:24px\">Weekly Competitive Intelligence Digest</h1>\n    <p style=\"margin:8px 0 0;opacity:0.8\">Week of ${prevData.week_start} · Generated ${prevData.generated_at?.split('T')[0]}</p>\n  </div>\n  <div style=\"background:#f8f9fa;padding:24px\">\n    <div style=\"background:white;padding:20px;border-radius:8px;margin-bottom:20px;border-left:4px solid #e63946\">\n      <h2 style=\"color:#1a1a2e;margin-top:0\">Executive Summary</h2>\n      <p style=\"line-height:1.6;color:#333\">${digest.executive_summary ?? 'No summary available.'}</p>\n    </div>\n    ${digest.key_threats?.length ? `\n    <div style=\"background:white;padding:20px;border-radius:8px;margin-bottom:20px\">\n      <h2 style=\"color:#e63946;margin-top:0\">🚨 Key Threats</h2>\n      ${digest.key_threats.map(t => `<div style=\"padding:12px;background:#fff5f5;border-radius:4px;margin-bottom:8px\">\n        <strong>${t.competitor}</strong>: ${t.threat}<br/>\n        <span style=\"color:#e63946;font-size:12px\">Urgency: ${t.urgency?.toUpperCase()}</span> · \n        <span style=\"color:#666;font-size:12px\">Response: ${t.recommended_response}</span>\n      </div>`).join('')}\n    </div>` : ''}\n    ${digest.opportunities?.length ? `\n    <div style=\"background:white;padding:20px;border-radius:8px;margin-bottom:20px\">\n      <h2 style=\"color:#2ecc71;margin-top:0\">✅ Opportunities</h2>\n      ${digest.opportunities.map(o => `<div style=\"padding:12px;background:#f0fff4;border-radius:4px;margin-bottom:8px\">\n        <strong>${o.opportunity}</strong><br/>\n        <span style=\"color:#666;font-size:13px\">${o.evidence}</span><br/>\n        <span style=\"color:#2ecc71;font-size:13px;font-weight:bold\">→ ${o.action}</span>\n      </div>`).join('')}\n    </div>` : ''}\n    ${digest.action_items?.length ? `\n    <div style=\"background:white;padding:20px;border-radius:8px;margin-bottom:20px\">\n      <h2 style=\"color:#1a1a2e;margin-top:0\">📋 Action Items</h2>\n      ${digest.action_items.map(a => `<div style=\"padding:8px;border-bottom:1px solid #eee\">\n        <strong style=\"color:#e63946\">[${a.owner}]</strong> ${a.action} <span style=\"color:#999;font-size:12px\">(${a.deadline})</span>\n      </div>`).join('')}\n    </div>` : ''}\n  </div>\n</div>`;\n\nreturn {\n  ...prevData,\n  digest,\n  email_html: emailHtml,\n  week_start: prevData.week_start\n};"
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000009",
+      "name": "Send Digest Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1680, 200],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "REPLACE_RECIPIENT_1@DOMAIN.com, REPLACE_RECIPIENT_2@DOMAIN.com",
+        "subject": "🔍 Competitive Intelligence Digest — Week of {{ $json.week_start }}",
+        "emailType": "html",
+        "message": "={{ $json.email_html }}",
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000010",
+      "name": "Post Digest to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1680, 400],
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "channel": {
+          "__rl": true,
+          "value": "#competitive-intel",
+          "mode": "name"
+        },
+        "text": ":mag: Weekly Competitive Intelligence Digest",
+        "blocksUi": {
+          "blocksValues": [
+            {
+              "type": "header",
+              "text": {
+                "type": "plain_text",
+                "text": "Weekly Competitive Intel — Week of {{ $json.week_start }}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "={{ $json.digest?.executive_summary ?? 'Digest generated.' }}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "={{ ':rotating_light: *Key Threats:* ' + ($json.digest?.key_threats?.length ?? 0) + ' | :white_check_mark: *Opportunities:* ' + ($json.digest?.opportunities?.length ?? 0) + ' | :bar_chart: *Trends:* ' + ($json.digest?.market_trends?.length ?? 0) }}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "={{ ':pushpin: *Top Action Items This Week:*\\n' + ($json.digest?.action_items?.slice(0,3).map(a => '• [' + a.owner + '] ' + a.action).join('\\n') ?? 'None') }}"
+              }
+            },
+            {
+              "type": "context",
+              "elements": [
+                {
+                  "type": "mrkdwn",
+                  "text": "Full digest sent via email · Sources analyzed: {{ $json.total_articles ?? 0 }}"
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_SLACK_CREDENTIAL_ID",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "id": "a6000001-0000-4000-8000-000000000011",
+      "name": "Archive Digest to Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [1920, 300],
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_INTEL_ARCHIVE_DATABASE_ID",
+          "mode": "id"
+        },
+        "title": "Competitive Intel — Week of {{ $json.week_start }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Week", "dateValue": "={{ $json.week_start }}" },
+            { "key": "Threats Identified", "numberValue": "={{ $json.digest?.key_threats?.length ?? 0 }}" },
+            { "key": "Opportunities", "numberValue": "={{ $json.digest?.opportunities?.length ?? 0 }}" },
+            { "key": "Articles Analyzed", "numberValue": "={{ $json.total_articles ?? 0 }}" },
+            { "key": "Summary", "richTextValue": "={{ $json.digest?.executive_summary ?? '' }}" }
+          ]
+        }
+      },
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_NOTION_CREDENTIAL_ID",
+          "name": "Notion API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 7AM": {
+      "main": [
+        [{ "node": "Define Competitors & Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Define Competitors & Sources": {
+      "main": [
+        [
+          { "node": "Fetch Competitor A Blog", "type": "main", "index": 0 },
+          { "node": "Fetch Competitor B Blog", "type": "main", "index": 0 },
+          { "node": "Fetch Industry News via NewsAPI", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Competitor A Blog": {
+      "main": [
+        [{ "node": "Merge All Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Competitor B Blog": {
+      "main": [
+        [{ "node": "Merge All Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Industry News via NewsAPI": {
+      "main": [
+        [{ "node": "Merge All Sources", "type": "main", "index": 0 }]
+      ]
+    },
+    "Merge All Sources": {
+      "main": [
+        [{ "node": "AI Analyze & Generate Digest", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Analyze & Generate Digest": {
+      "main": [
+        [{ "node": "Parse Digest", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Digest": {
+      "main": [
+        [
+          { "node": "Send Digest Email", "type": "main", "index": 0 },
+          { "node": "Post Digest to Slack", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send Digest Email": {
+      "main": [
+        [{ "node": "Archive Digest to Notion", "type": "main", "index": 0 }]
+      ]
+    },
+    "Post Digest to Slack": {
+      "main": [
+        [{ "node": "Archive Digest to Notion", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "id": "wf-competitive-intel-digest-v1",
+  "meta": {
+    "instanceId": "REPLACE_WITH_YOUR_N8N_INSTANCE_ID",
+    "templateCredsSetupCompleted": false
+  },
+  "tags": ["marketing", "competitive-intelligence", "ai", "weekly-digest", "research", "production"]
+}
